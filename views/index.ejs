@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Crossword</title>
+		<style type="text/css">
+			td{
+				height: 50px;
+				width: 50px;
+				border: 1px solid black;
+				overflow: hidden;
+				/*background-color: aqua;*/
+				position: relative;
+			}
+
+			td input{
+				height: 20px;
+				width: 50px;
+				vertical-align: bottom;
+				position: absolute;
+				bottom: 0;
+				left: 0;
+			}
+
+			.inactive{
+				background-color: black;
+			}
+
+			#puzzle{
+				width: 100%;
+				display: none;
+			}
+
+			#puzzle div{
+				display: inline-block;
+				vertical-align: top;
+			}
+
+			#clues-div{
+				border: 1px dashed pink;
+				height: 100%;
+				width: 400px;
+				position: fixed;
+			}
+
+			#clues{
+				height: 90%;
+				width: 100%;
+			}
+		</style>
+		<script src="/jquery/jquery.js"></script>
+		<script src="/socket.io/socket.io.js"></script>
+		<script type="text/javascript">
+			$(document).ready(function(){
+				var socket = io.connect()
+
+				var grid
+
+				socket.on("new_grid", function(data){
+					grid = data
+					console.log(grid.grid)
+					$("#grid_name").text(grid.name)
+					$("#clues").val(grid.clues)
+
+					$("#grid").append("<table>")
+					for (var row = 0; row < grid.grid.length; row++) {
+						$("#grid").append("<tr>")
+						for (var col = 0; col < grid.grid[row].length; col++) {
+							$("#grid").append(`<td id="td-${row}-${col}" row="${row}" col="${col}"><div id="num-${row}-${col}"></div><input type="text" id="input-${row}-${col}" row="${row}" col="${col}" class="cell"></td>`)
+						};
+						$("#grid").append("</tr>")
+					};
+					$("#grid").append("</table>")
+
+					fill_grid()
+					number()
+					set_clues_div_size()
+					
+				})
+
+				socket.on("grid_update", function(new_grid){
+					console.log(new_grid)
+
+					for (var row = 0; row < new_grid.length; row++) {
+						for (var col = 0; col < new_grid[row].length; col++) {
+							if (new_grid[row][col] !== grid.grid[row][col]) {
+								if (new_grid[row][col] === false){
+									deactivate_cell(row, col)
+								} else {
+									activate_cell(row, col)
+									$(`#input-${row}-${col}`).val(new_grid[row][col])
+								}
+							}
+						};
+					};
+					
+					grid.grid = new_grid
+					number()
+				})
+
+				socket.on("clues_update", function(data){
+					$("#clues").val(data)
+				})
+
+				function activate_cell(row, col){
+					var cell = $(`#td-${row}-${col}`)
+					cell.removeClass("inactive")
+					cell.html(`<div id="num-${row}-${col}"></div><input type="text" id="input-${row}-${col}" row="${row}" col="${col}" class="cell">`)
+				}
+				
+				function deactivate_cell(row, col){
+					var cell = $(`#td-${row}-${col}`)
+					cell.addClass("inactive")
+					cell.html("")
+				}
+
+				function fill_grid(){
+					for (var row = 0; row < grid.grid.length; row++) {
+						for (var col = 0; col < grid.grid[row].length; col++) {
+							if (grid.grid[row][col] === false){
+								deactivate_cell(row, col)
+							} else {
+								activate_cell(row, col)
+								$(`#input-${row}-${col}`).val(grid.grid[row][col])
+							}
+						};
+					};
+				}
+
+				function set_clues_div_size(){
+					var new_width = $(window).width()-$("#grid").width()-50
+					$("#clues-div").width(new_width)
+				}
+
+				function toggle_selector_and_puzzle(event){
+					event.preventDefault()
+					$("#selector").toggle()
+					$("#puzzle").toggle()
+				}
+
+				$("body").on("click", ".puzzle_link", function(e){
+					socket.emit("new_grid_request", {crossword_id: $(this).attr("crossword_id")})
+					toggle_selector_and_puzzle(e)
+				})
+
+				$("body").on("click", "#back_to_selector", function(e){
+					toggle_selector_and_puzzle(e)
+				})
+
+				$("body").on("click", "td", function(e){
+					$(`#input-${$(this).attr("row")}-${$(this).attr("col")}`).focus()
+				})
+
+				$("body").on("dblclick", "td", function(e){
+					console.log("dblclick", $(this).attr("row"), $(this).attr("col"))
+					var row = $(this).attr("row")
+					var col = $(this).attr("col")
+					if (grid.grid[row][col] === false){
+						grid.grid[row][col] = ""
+						activate_cell(row, col)
+					} else {
+						grid.grid[row][col] = false
+						deactivate_cell(row, col)
+					}
+					console.log(grid._id)
+					socket.emit("grid_update", {grid: grid.grid, crossword_id: grid._id})
+					number()
+				})
+
+				$("body").on("keydown", "input.cell", function(e){
+					if (e.keyCode == 40){
+						$(`#input-${(Number($(this).attr("row"))+1)%grid.grid.length}-${$(this).attr("col")}`).focus()
+					} else if (e.keyCode == 38) {
+						if($(this).attr("row")==0){
+							var new_row = grid.grid.length - 1
+						} else {
+							var new_row = Number($(this).attr("row"))-1
+						}
+						$(`#input-${new_row}-${$(this).attr("col")}`).focus()
+					}
+				})
+
+				$("body").on("keyup", "input.cell", function(e){
+					grid.grid[$(this).attr("row")][$(this).attr("col")] = $(this).val()
+					socket.emit("grid_update", {grid: grid.grid, crossword_id: grid._id})
+				})
+
+				$("#clues").change(function(){
+					console.log($(this).val())
+					socket.emit("clues_update", {clues: $(this).val(), crossword_id: grid._id})
+				})
+
+				$(window).resize(set_clues_div_size)
+
+				function number(){
+					console.log("number")
+					var current_number = 1
+					for (var row = 0; row < grid.grid.length; row++){
+						for (var col = 0; col < grid.grid[row].length; col++){
+							if (grid.grid[row][col] !== false &&
+								((row-1 < 0 || grid.grid[row-1][col] === false) && !(row+1 >= grid.grid.length || grid.grid[row+1][col] === false) ||
+								 (col-1 < 0 || grid.grid[row][col-1] === false) && !(col+1 >= grid.grid[row].length || grid.grid[row][col+1] === false)) ) {
+									$(`#num-${row}-${col}`).html(current_number)
+									current_number++
+							} else {
+								$(`#num-${row}-${col}`).html("")
+							}
+						}
+					}
+
+				}
+			})
+		</script>
+	</head>
+	<body>
+		<div id="selector">
+			<h3>New Grid...</h3>
+			<p>Form tk</p>
+			<h3>Join Existing Grid</h3>
+			<ul>
+				<% for (var puzzle in all_puzzles) { %>
+					<li><a href="#" crossword_id="<%= all_puzzles[puzzle]._id %>" class="puzzle_link"><%= all_puzzles[puzzle].name %></a></li>
+				<% } %>
+			</ul>
+		</div>
+		<div id="puzzle">
+			<h1 id="grid_name"></h1>
+			<p><a href="#" id="back_to_selector">Choose a different puzzle</a></p>
+			<div id="grid"></div>
+			<div id="clues-div">
+				<textarea id="clues"></textarea>
+			</div>
+		</div>
+		<div id="debug"></div>
+	</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "shareable_crossword_grid",
+  "version": "0.1.0",
+  "description": "Maybe lets multiple people collaborate on solving a crossword?",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jack Brounstein",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "ejs": "^2.5.5",
+    "express": "^4.14.0",
+    "jquery": "^3.1.1",
+    "mongoose": "^4.7.6",
+    "socket.io": "^1.7.2"
+  }
+}
